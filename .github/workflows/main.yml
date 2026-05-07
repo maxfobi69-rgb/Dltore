@@ -24,9 +24,9 @@ jobs:
 
       - name: دانلود فایل تورنت با aria2 (بدون خطای DHT)
         run: |
-          # پاک‌سازی پوشه قدیمی DHT که ممکن است خطا ایجاد کند
-          rm -rf ~/.aria2
-          mkdir -p ~/.aria2
+          # پاک‌سازی کش پیش‌فرض aria2 در اوبونتو (همان جایی که خطا رخ می‌داد)
+          rm -rf ~/.cache/aria2
+          mkdir -p ~/.cache/aria2
 
           # دریافت لیست ترکرهای بروز برای سرعت بیشتر
           tracker_list=$(curl -s https://ngosang.github.io/trackerslist/trackers_all_http.txt | awk '$0' | tr '\n\n' ',')
