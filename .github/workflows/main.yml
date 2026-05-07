@@ -12,7 +12,7 @@ jobs:
   download-and-commit:
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # برای Commit کردن فایلها در مخزن
+      contents: write
     steps:
       - name: دریافت سورس مخزن
         uses: actions/checkout@v4
@@ -22,12 +22,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y aria2 p7zip-full
 
-      - name: دانلود فایل تورنت با aria2
+      - name: دانلود فایل تورنت با aria2 (بدون خطای DHT)
         run: |
-          # دریافت لیست ترکرهای بروز برای سرعت بیشتر (اختیاری)
+          # پاک‌سازی پوشه قدیمی DHT که ممکن است خطا ایجاد کند
+          rm -rf ~/.aria2
+          mkdir -p ~/.aria2
+
+          # دریافت لیست ترکرهای بروز برای سرعت بیشتر
           tracker_list=$(curl -s https://ngosang.github.io/trackerslist/trackers_all_http.txt | awk '$0' | tr '\n\n' ',')
           
-          # اجرای دستور دانلود
           aria2c \
             --dir="${GITHUB_WORKSPACE}/temp_downloads" \
             --seed-ratio=0 \
@@ -52,16 +55,14 @@ jobs:
 
       - name: آماده‌سازی فایل‌ها و بایگانی چندبخشی در پوشه download
         run: |
-          # پوشه download را خالی کرده و از نو میسازیم
           rm -rf download
           mkdir -p download
 
-          # اگر فایلی دانلود شده باشد، آنها را به پوشه download منتقل میکنیم
           if [ -d "temp_downloads" ] && [ "$(ls -A temp_downloads)" ]; then
             for f in temp_downloads/*; do
               if [ -f "$f" ]; then
                 FILESIZE=$(stat -c%s "$f")
-                if [ $FILESIZE -gt 52428800 ]; then   # بزرگتر از ۵۰ مگابایت
+                if [ $FILESIZE -gt 52428800 ]; then
                   echo "حجم فایل $(basename "$f") بیش از 50MB است. ساخت بایگانی چندبخشی..."
                   7z a -v50m -mx0 "download/$(basename "$f").7z" "$f"
                 else
@@ -71,11 +72,10 @@ jobs:
               fi
             done
           else
-            echo "هیچ فایلی برای انتقال وجود ندارد. لطفاً لینک را بررسی کنید."
+            echo "هیچ فایلی برای انتقال وجود ندارد. لطفاً لینک تورنت را بررسی کنید."
             exit 1
           fi
           
-          # وضعیت پوشه download را نمایش بده
           echo "محتوای پوشه download:"
           ls -lh download/
 
