@@ -1,0 +1,92 @@
+name: Torrent Downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      torrent_link:
+        description: 'لینک مگنت یا آدرس فایل تورنت'
+        required: true
+        default: ''
+
+jobs:
+  download-and-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # برای Commit کردن فایلها در مخزن
+    steps:
+      - name: دریافت سورس مخزن
+        uses: actions/checkout@v4
+
+      - name: نصب ابزارهای مورد نیاز (aria2 و 7-Zip)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 p7zip-full
+
+      - name: دانلود فایل تورنت با aria2
+        run: |
+          # دریافت لیست ترکرهای بروز برای سرعت بیشتر (اختیاری)
+          tracker_list=$(curl -s https://ngosang.github.io/trackerslist/trackers_all_http.txt | awk '$0' | tr '\n\n' ',')
+          
+          # اجرای دستور دانلود
+          aria2c \
+            --dir="${GITHUB_WORKSPACE}/temp_downloads" \
+            --seed-ratio=0 \
+            --seed-time=0 \
+            --max-upload-limit=0 \
+            --enable-dht=true \
+            --bt-enable-lpd=true \
+            --enable-peer-exchange=true \
+            --bt-max-peers=100 \
+            --listen-port=51413 \
+            --dht-listen-port=51413 \
+            --bt-tracker-connect-timeout=10 \
+            --bt-tracker-timeout=10 \
+            --bt-hash-check-seed=true \
+            --bt-seed-unverified=false \
+            --follow-torrent=true \
+            --pause-metadata=false \
+            --bt-save-metadata=true \
+            --bt-load-saved-metadata=true \
+            --bt-tracker="${tracker_list}" \
+            "${{ github.event.inputs.torrent_link }}"
+
+      - name: آماده‌سازی فایل‌ها و بایگانی چندبخشی در پوشه download
+        run: |
+          # پوشه download را خالی کرده و از نو میسازیم
+          rm -rf download
+          mkdir -p download
+
+          # اگر فایلی دانلود شده باشد، آنها را به پوشه download منتقل میکنیم
+          if [ -d "temp_downloads" ] && [ "$(ls -A temp_downloads)" ]; then
+            for f in temp_downloads/*; do
+              if [ -f "$f" ]; then
+                FILESIZE=$(stat -c%s "$f")
+                if [ $FILESIZE -gt 52428800 ]; then   # بزرگتر از ۵۰ مگابایت
+                  echo "حجم فایل $(basename "$f") بیش از 50MB است. ساخت بایگانی چندبخشی..."
+                  7z a -v50m -mx0 "download/$(basename "$f").7z" "$f"
+                else
+                  echo "حجم کمتر از 50MB است. کپی مستقیم فایل..."
+                  cp "$f" download/
+                fi
+              fi
+            done
+          else
+            echo "هیچ فایلی برای انتقال وجود ندارد. لطفاً لینک را بررسی کنید."
+            exit 1
+          fi
+          
+          # وضعیت پوشه download را نمایش بده
+          echo "محتوای پوشه download:"
+          ls -lh download/
+
+      - name: Commit و Push فایل‌ها به مخزن
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add download/
+          if git diff --staged --quiet; then
+            echo "هیچ فایل جدیدی برای کامیت وجود ندارد."
+            exit 0
+          fi
+          git commit -m "دانلود تورنت: ${{ github.event.inputs.torrent_link }} [skip ci]"
+          git push
